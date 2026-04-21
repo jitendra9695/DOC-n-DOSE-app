@@ -4,7 +4,7 @@ import axios from "axios";
 // Production: set VITE_API_URL in Vercel → https://your-app.railway.app/api
 const BASE_URL =
   import.meta.env.VITE_API_URL ||
-  "https://ingenious-smile-production.up.railway.app/api";
+  "https://ingenious-smile-production-d01a.up.railway.app/api";
 
 const api = axios.create({
   baseURL: BASE_URL,
