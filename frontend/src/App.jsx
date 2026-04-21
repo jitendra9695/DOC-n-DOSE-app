@@ -12,6 +12,7 @@ import DoctorList from "./pages/DoctorList";
 import BookAppointment from "./pages/BookAppointment";
 import Chat from "./pages/Chat";
 import MedicineOrder from "./pages/MedicineOrder";
+import AdminAnalytics from "./pages/AdminAnalytics";
 
 const PrivateRoute = ({ children, roles }) => {
   const { user } = useAuth();
@@ -102,6 +103,14 @@ export default function App() {
           element={
             <PrivateRoute roles={["admin"]}>
               <AdminDashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <PrivateRoute roles={["admin"]}>
+              <AdminAnalytics />
             </PrivateRoute>
           }
         />

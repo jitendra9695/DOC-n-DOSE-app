@@ -2,7 +2,9 @@ import axios from "axios";
 
 // Local:      create frontend/.env.local → VITE_API_URL=http://localhost:8000/api
 // Production: set VITE_API_URL in Vercel → https://your-app.railway.app/api
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://ingenious-smile-production.up.railway.app/api";
 
 const api = axios.create({
   baseURL: BASE_URL,
