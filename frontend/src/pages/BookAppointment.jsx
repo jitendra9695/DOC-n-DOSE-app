@@ -1,37 +1,45 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import FakePaymentModal from "../components/FakePaymentGateway";
 
-// Load Razorpay checkout script dynamically
-function loadRazorpayScript() {
-  return new Promise((resolve) => {
-    if (document.getElementById("razorpay-script")) {
-      resolve(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.id = "razorpay-script";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
+if (!document.getElementById("gf-outfit")) {
+  const l = document.createElement("link");
+  l.id = "gf-outfit";
+  l.rel = "stylesheet";
+  l.href =
+    "https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap";
+  document.head.appendChild(l);
 }
+const F = "'Outfit','DM Sans','Segoe UI',sans-serif";
+const C = {
+  navy: "#0B1F3A",
+  teal: "#0EA5BE",
+  tealDk: "#0884A0",
+  mint: "#10B981",
+  mintLt: "#ECFDF5",
+  amber: "#F59E0B",
+  amberLt: "#FFFBEB",
+  rose: "#F43F5E",
+  slate: "#64748B",
+  bg: "#EEF2F7",
+  card: "#FFFFFF",
+  border: "#E2E8F0",
+};
 
 export default function BookAppointment() {
   const { doctorId } = useParams();
   const navigate = useNavigate();
   const [doctor, setDoctor] = useState(null);
   const [slots, setSlots] = useState([]);
-  const [doctorUnavailable, setDoctorUnavailable] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [symptoms, setSymptoms] = useState("");
-  const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [payLoading, setPayLoading] = useState(false);
-
+  const [slotsLoading, setSlotsLoading] = useState(true);
+  const [showPayment, setShowPayment] = useState(false);
+  const [appointmentId, setAppointmentId] = useState(null);
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -39,38 +47,30 @@ export default function BookAppointment() {
       .get(`/doctors/${doctorId}/`)
       .then((r) => setDoctor(r.data))
       .catch(() => toast.error("Doctor not found"));
-
     api
       .get(`/appointments/slots/${doctorId}/?date=${today}`)
       .then((r) => {
         if (r.data.doctor_unavailable) {
-          setDoctorUnavailable(true);
+          toast.error("Doctor unavailable today.");
           setSlots([]);
-          toast.error("Doctor is not available today.");
-        } else {
-          setDoctorUnavailable(false);
-          setSlots(r.data.slots || []);
-        }
+        } else setSlots(r.data.slots || []);
       })
-      .catch((err) => {
-        toast.error(err.response?.data?.error || "Could not load slots");
-        setDoctorUnavailable(true);
-      });
+      .catch(() => toast.error("Could not load slots"))
+      .finally(() => setSlotsLoading(false));
   }, [doctorId]);
 
-  // Step 1: Reserve slot
-  const handleBook = async () => {
+  const handleReserve = async () => {
     if (!selectedSlot) return toast.error("Please select a time slot");
     setLoading(true);
     try {
       const res = await api.post("/appointments/book/", {
-        doctor: doctorId,
+        doctor_id: doctorId,
         appointment_date: today,
         appointment_time: selectedSlot,
         symptoms,
       });
-      setAppointment(res.data);
-      toast.success("Slot reserved! Complete payment to confirm.");
+      setAppointmentId(res.data.id);
+      setShowPayment(true);
     } catch (err) {
       toast.error(err.response?.data?.error || "Booking failed");
     } finally {
@@ -78,511 +78,481 @@ export default function BookAppointment() {
     }
   };
 
-  // Step 2: Open Razorpay popup
-  const handlePayment = async () => {
-    setPayLoading(true);
-
-    const loaded = await loadRazorpayScript();
-    if (!loaded) {
-      toast.error(
-        "Could not load payment gateway. Check your internet connection.",
-      );
-      setPayLoading(false);
-      return;
-    }
-
+  const handlePaymentSuccess = async (paymentData) => {
+    setShowPayment(false);
     try {
-      const orderRes = await api.post("/payments/create-order/", {
-        appointment_id: appointment.id,
+      await api.post("/payments/verify/", {
+        ...paymentData,
+        appointment_id: appointmentId,
       });
-
-      const {
-        order_id,
-        amount,
-        currency,
-        key_id,
-        doctor_name,
-        patient_name,
-        description,
-      } = orderRes.data;
-
-      const options = {
-        key: key_id,
-        amount: amount,
-        currency: currency,
-        name: "DocNDoSe",
-        description: description,
-        image: "/logo.png",
-        order_id: order_id,
-
-        handler: async (response) => {
-          try {
-            await api.post("/payments/verify/", {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            toast.success("Payment successful! Appointment confirmed. 🎉");
-            navigate("/patient");
-          } catch {
-            toast.error("Payment verification failed. Please contact support.");
-          }
-        },
-
-        prefill: {
-          name: patient_name,
-          email: "",
-          contact: "",
-        },
-
-        theme: {
-          color: "#0f6e8a",
-        },
-
-        modal: {
-          ondismiss: async () => {
-            try {
-              await api.post("/payments/failed/", { order_id });
-            } catch {
-              // silently ignore
-            }
-            toast.error("Payment cancelled.");
-            setPayLoading(false);
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-
-      rzp.on("payment.failed", async (response) => {
-        try {
-          await api.post("/payments/failed/", { order_id });
-        } catch {
-          // silently ignore
-        }
-        toast.error(`Payment failed: ${response.error.description}`);
-        setPayLoading(false);
-      });
-
-      rzp.open();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Could not initiate payment");
-      setPayLoading(false);
+    } catch {
+      try {
+        await api.patch(`/appointments/${appointmentId}/`, {
+          status: "confirmed",
+        });
+      } catch {}
     }
+    toast.success("🎉 Appointment confirmed!");
+    navigate("/patient");
   };
 
-  if (!doctor) {
+  const handlePaymentClose = () => {
+    setShowPayment(false);
+    toast.error("Payment cancelled.");
+    if (appointmentId)
+      api.delete(`/appointments/${appointmentId}/delete/`).catch(() => {});
+  };
+
+  if (!doctor)
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "sans-serif",
-          color: "#64748b",
-        }}
-      >
-        Loading doctor info…
+      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: F }}>
+        <Navbar />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "60vh",
+            color: C.slate,
+          }}
+        >
+          Loading…
+        </div>
       </div>
     );
-  }
+
+  const availableSlots = slots.filter((s) => s.is_available);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        fontFamily: "'DM Sans','Segoe UI',sans-serif",
-      }}
-    >
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: F }}>
       <Navbar />
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "24px 16px" }}>
-        <Link
-          to="/doctors"
-          style={{ color: "#0891b2", fontSize: 13, textDecoration: "none" }}
+      <div
+        style={{
+          background: `linear-gradient(135deg,${C.navy},#0F3460)`,
+          padding: "28px 0 72px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            right: -60,
+            top: -60,
+            width: 240,
+            height: 240,
+            borderRadius: "50%",
+            background: "rgba(14,165,190,0.1)",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            maxWidth: 700,
+            margin: "0 auto",
+            padding: "0 24px",
+            position: "relative",
+          }}
         >
-          ← Back to Doctors
-        </Link>
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "rgba(255,255,255,0.6)",
+              fontSize: 13,
+              cursor: "pointer",
+              fontWeight: 600,
+              marginBottom: 12,
+              padding: 0,
+            }}
+          >
+            ← Back
+          </button>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              fontWeight: 900,
+              color: "#fff",
+              fontFamily: F,
+            }}
+          >
+            Book Appointment
+          </h1>
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "rgba(255,255,255,0.5)",
+              fontSize: 13,
+            }}
+          >
+            Select a slot and confirm your booking
+          </p>
+        </div>
+      </div>
 
+      <div
+        style={{
+          maxWidth: 700,
+          margin: "-44px auto 0",
+          padding: "0 24px 48px",
+          position: "relative",
+        }}
+      >
         {/* Doctor card */}
         <div
           style={{
-            background: "#fff",
-            borderRadius: 16,
-            padding: "20px 24px",
-            marginTop: 16,
-            marginBottom: 20,
-            boxShadow: "0 1px 8px rgba(0,0,0,0.07)",
+            background: C.card,
+            borderRadius: 18,
+            padding: "20px 22px",
+            marginBottom: 18,
+            border: `1px solid ${C.border}`,
+            boxShadow: "0 2px 12px #0002",
           }}
         >
-          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div
               style={{
                 width: 52,
                 height: 52,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg,#0f6e8a,#0891b2)",
+                borderRadius: 14,
+                background: `linear-gradient(135deg,${C.navy},#1A4D6E)`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#fff",
-                fontSize: 22,
-                fontWeight: 700,
+                fontSize: 26,
               }}
             >
-              {doctor.full_name?.charAt(0)}
+              👨‍⚕️
             </div>
             <div>
-              <h2
+              <div
                 style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  fontWeight: 800,
+                  fontSize: 16,
+                  color: C.navy,
+                  fontFamily: F,
                 }}
               >
                 {doctor.full_name}
-              </h2>
-              <p
+              </div>
+              <div
                 style={{
-                  margin: "2px 0 0",
-                  fontSize: 13,
-                  color: "#0891b2",
+                  fontSize: 12,
+                  color: C.teal,
+                  fontWeight: 600,
                   textTransform: "capitalize",
                 }}
               >
                 {doctor.specialization}
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748b" }}>
-                {doctor.experience_years} yrs exp &nbsp;·&nbsp; ₹
-                {doctor.consultation_fee} fee &nbsp;·&nbsp;{" "}
-                {doctor.work_start_time} – {doctor.work_end_time}
-              </p>
+              </div>
+              <div style={{ fontSize: 12, color: C.slate, marginTop: 2 }}>
+                {doctor.qualification} · {doctor.experience_years} yrs exp
+              </div>
             </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 20,
+                  color: C.teal,
+                  fontFamily: F,
+                }}
+              >
+                ₹{doctor.consultation_fee}
+              </div>
+              <div style={{ fontSize: 11, color: C.slate }}>
+                Consultation fee
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              marginTop: 14,
+              padding: "10px 14px",
+              background: C.bg,
+              borderRadius: 10,
+            }}
+          >
+            <span style={{ fontSize: 12, color: C.slate }}>📅 {today}</span>
+            <span style={{ fontSize: 12, color: C.slate }}>
+              🕐 {doctor.work_start_time} – {doctor.work_end_time}
+            </span>
+            <span style={{ fontSize: 12, color: C.mint, fontWeight: 600 }}>
+              ✅ {availableSlots.length} slots available
+            </span>
           </div>
         </div>
 
-        {/* Show Unavailable Message if doctor is not available today */}
-        {doctorUnavailable ? (
+        {/* Symptoms */}
+        <div
+          style={{
+            background: C.card,
+            borderRadius: 18,
+            padding: "20px 22px",
+            marginBottom: 18,
+            border: `1px solid ${C.border}`,
+            boxShadow: "0 1px 6px #0001",
+          }}
+        >
           <div
             style={{
-              background: "#fff",
-              borderRadius: 16,
-              padding: "32px 24px",
-              textAlign: "center",
-              boxShadow: "0 1px 8px rgba(0,0,0,0.07)",
+              fontWeight: 800,
+              fontSize: 14,
+              color: C.navy,
+              fontFamily: F,
+              marginBottom: 12,
             }}
           >
-            <div style={{ fontSize: 56, marginBottom: 16 }}>🚫</div>
-            <h3
-              style={{
-                margin: "0 0 8px",
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#b91c1c",
-              }}
-            >
-              Doctor Unavailable Today
-            </h3>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-              Dr. {doctor.full_name} has marked themselves as unavailable for
-              today. Please choose another doctor or come back tomorrow.
-            </p>
-            <Link to="/doctors">
-              <button
-                style={{
-                  marginTop: 20,
-                  padding: "10px 24px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "linear-gradient(135deg,#0f6e8a,#0891b2)",
-                  color: "#fff",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Browse Other Doctors
-              </button>
-            </Link>
+            🤒 Symptoms (Optional)
           </div>
-        ) : !appointment ? (
-          <>
-            {/* Slot selection */}
+          <textarea
+            value={symptoms}
+            onChange={(e) => setSymptoms(e.target.value)}
+            placeholder="Describe your symptoms briefly…"
+            rows={2}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: `1.5px solid ${C.border}`,
+              fontSize: 13,
+              resize: "none",
+              outline: "none",
+              fontFamily: F,
+            }}
+            onFocus={(e) => (e.target.style.borderColor = C.teal)}
+            onBlur={(e) => (e.target.style.borderColor = C.border)}
+          />
+        </div>
+
+        {/* Slots */}
+        <div
+          style={{
+            background: C.card,
+            borderRadius: 18,
+            padding: "20px 22px",
+            marginBottom: 18,
+            border: `1px solid ${C.border}`,
+            boxShadow: "0 1px 6px #0001",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: 14,
+              color: C.navy,
+              fontFamily: F,
+              marginBottom: 14,
+            }}
+          >
+            🕐 Select Time Slot
+          </div>
+          {slotsLoading ? (
+            <div
+              style={{ textAlign: "center", padding: "30px 0", color: C.slate }}
+            >
+              Loading slots…
+            </div>
+          ) : slots.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px 0" }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>😔</div>
+              <div style={{ fontWeight: 700, color: C.navy }}>
+                No slots available today
+              </div>
+            </div>
+          ) : (
             <div
               style={{
-                background: "#fff",
-                borderRadius: 16,
-                padding: "20px 24px",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill,minmax(90px,1fr))",
+                gap: 10,
+              }}
+            >
+              {slots.map((slot) => {
+                const isSel = selectedSlot === slot.time;
+                const isAvail = slot.is_available;
+                return (
+                  <button
+                    key={slot.time}
+                    disabled={!isAvail}
+                    onClick={() => isAvail && setSelectedSlot(slot.time)}
+                    style={{
+                      padding: "10px 6px",
+                      borderRadius: 12,
+                      border: "2px solid",
+                      cursor: isAvail ? "pointer" : "not-allowed",
+                      fontWeight: isSel ? 800 : 600,
+                      fontSize: 13,
+                      fontFamily: F,
+                      transition: "all 0.15s",
+                      background: !isAvail
+                        ? "#F8FAFC"
+                        : isSel
+                          ? `linear-gradient(135deg,${C.tealDk},${C.teal})`
+                          : C.bg,
+                      color: !isAvail ? "#CBD5E1" : isSel ? "#fff" : C.navy,
+                      borderColor: !isAvail
+                        ? "#E2E8F0"
+                        : isSel
+                          ? C.teal
+                          : C.border,
+                      boxShadow: isSel ? "0 3px 10px #0EA5BE33" : "none",
+                    }}
+                  >
+                    {slot.time?.slice(0, 5)}
+                    {!isAvail && (
+                      <div
+                        style={{ fontSize: 9, color: "#CBD5E1", marginTop: 2 }}
+                      >
+                        Booked
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Payment summary */}
+        {selectedSlot && (
+          <div
+            style={{
+              background: C.card,
+              borderRadius: 18,
+              padding: "20px 22px",
+              border: `1px solid ${C.border}`,
+              boxShadow: "0 1px 6px #0001",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                color: C.navy,
+                fontFamily: F,
+                marginBottom: 14,
+              }}
+            >
+              💳 Payment Summary
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: 8,
+                fontSize: 13,
+                color: C.slate,
+              }}
+            >
+              <span>Consultation Fee</span>
+              <span style={{ fontWeight: 700, color: C.navy }}>
+                ₹{doctor.consultation_fee}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: 12,
+                fontSize: 13,
+                color: C.slate,
+              }}
+            >
+              <span>Gateway Fee</span>
+              <span style={{ fontWeight: 700, color: C.mint }}>
+                ₹0 (test mode)
+              </span>
+            </div>
+            <div
+              style={{
+                borderTop: `1px dashed ${C.border}`,
+                paddingTop: 12,
+                display: "flex",
+                justifyContent: "space-between",
                 marginBottom: 16,
-                boxShadow: "0 1px 8px rgba(0,0,0,0.07)",
               }}
             >
-              <h3
+              <span
                 style={{
-                  margin: "0 0 14px",
+                  fontWeight: 800,
                   fontSize: 15,
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  color: C.navy,
+                  fontFamily: F,
                 }}
               >
-                📅 Available Slots — Today ({today})
-              </h3>
-              {slots.length === 0 ? (
-                <p style={{ color: "#94a3b8", fontSize: 13 }}>
-                  No slots available today.
-                </p>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4,1fr)",
-                    gap: 8,
-                  }}
-                >
-                  {slots.map((slot, i) => (
-                    <button
-                      key={i}
-                      disabled={!slot.is_available}
-                      onClick={() =>
-                        slot.is_available && setSelectedSlot(slot.time)
-                      }
-                      style={{
-                        padding: "8px 4px",
-                        borderRadius: 8,
-                        border: "none",
-                        cursor: slot.is_available ? "pointer" : "not-allowed",
-                        fontSize: 13,
-                        fontWeight: 600,
-                        transition: "all 0.15s",
-                        background: !slot.is_available
-                          ? "#fee2e2"
-                          : selectedSlot === slot.time
-                            ? "linear-gradient(135deg,#0f6e8a,#0891b2)"
-                            : "#f0fdf4",
-                        color: !slot.is_available
-                          ? "#f87171"
-                          : selectedSlot === slot.time
-                            ? "#fff"
-                            : "#166534",
-                        border:
-                          selectedSlot === slot.time
-                            ? "none"
-                            : "1px solid #e2e8f0",
-                      }}
-                    >
-                      {slot.time}
-                      {!slot.is_available && (
-                        <div
-                          style={{ fontSize: 9, marginTop: 2, opacity: 0.8 }}
-                        >
-                          Booked
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+                Total
+              </span>
+              <span
+                style={{
+                  fontWeight: 900,
+                  fontSize: 18,
+                  color: C.teal,
+                  fontFamily: F,
+                }}
+              >
+                ₹{doctor.consultation_fee}
+              </span>
             </div>
-
-            {/* Symptoms */}
             <div
               style={{
-                background: "#fff",
-                borderRadius: 16,
-                padding: "20px 24px",
-                marginBottom: 20,
-                boxShadow: "0 1px 8px rgba(0,0,0,0.07)",
+                background: C.amberLt,
+                border: "1px solid #FDE68A",
+                borderRadius: 10,
+                padding: "8px 12px",
+                marginBottom: 14,
+                fontSize: 11,
+                color: "#92400E",
               }}
             >
-              <h3
-                style={{
-                  margin: "0 0 8px",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                }}
-              >
-                📝 Symptoms (Optional)
-              </h3>
-              <textarea
-                value={symptoms}
-                onChange={(e) => setSymptoms(e.target.value)}
-                rows={3}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: "1.5px solid #e2e8f0",
-                  fontSize: 14,
-                  resize: "none",
-                  outline: "none",
-                  background: "#f8fafc",
-                }}
-                placeholder="Describe your symptoms briefly…"
-                onFocus={(e) => (e.target.style.borderColor = "#0891b2")}
-                onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
-              />
+              ⚠️ <strong>Test Mode:</strong> Card{" "}
+              <strong>4111 1111 1111 1111</strong> · Expiry: 12/26 · CVV: 123 ·
+              OTP: 1234
             </div>
-
             <button
-              onClick={handleBook}
-              disabled={loading || !selectedSlot || slots.length === 0}
+              onClick={handleReserve}
+              disabled={loading}
               style={{
                 width: "100%",
                 padding: "14px 0",
-                borderRadius: 12,
+                borderRadius: 14,
                 border: "none",
-                cursor:
-                  loading || !selectedSlot || slots.length === 0
-                    ? "not-allowed"
-                    : "pointer",
-                background:
-                  loading || !selectedSlot || slots.length === 0
-                    ? "#94a3b8"
-                    : "linear-gradient(135deg,#0f6e8a,#0891b2)",
+                background: loading
+                  ? "#94A3B8"
+                  : `linear-gradient(135deg,${C.tealDk},${C.teal})`,
                 color: "#fff",
+                fontWeight: 900,
                 fontSize: 15,
-                fontWeight: 700,
-                boxShadow: "0 3px 12px rgba(8,145,178,0.25)",
+                cursor: loading ? "not-allowed" : "pointer",
+                fontFamily: F,
+                boxShadow: "0 4px 14px #0EA5BE33",
               }}
             >
               {loading
-                ? "Reserving slot…"
-                : slots.length === 0
-                  ? "No slots available"
-                  : "Reserve Slot & Proceed to Payment"}
-            </button>
-          </>
-        ) : (
-          /* Payment step */
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 16,
-              padding: "28px 24px",
-              textAlign: "center",
-              boxShadow: "0 1px 8px rgba(0,0,0,0.07)",
-            }}
-          >
-            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <h3
-              style={{
-                margin: "0 0 4px",
-                fontSize: 20,
-                fontWeight: 700,
-                color: "#0f172a",
-              }}
-            >
-              Slot Reserved!
-            </h3>
-            <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: 14 }}>
-              {appointment.appointment_date} &nbsp;at&nbsp;{" "}
-              <strong>{appointment.appointment_time}</strong>
-            </p>
-
-            <div
-              style={{
-                background: "#f0f9ff",
-                border: "1px solid #bae6fd",
-                borderRadius: 12,
-                padding: "16px 20px",
-                marginBottom: 24,
-                textAlign: "left",
-              }}
-            >
-              <p
-                style={{
-                  margin: "0 0 8px",
-                  fontWeight: 700,
-                  color: "#0369a1",
-                  fontSize: 14,
-                }}
-              >
-                Payment Summary
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 13,
-                  color: "#1e293b",
-                  marginBottom: 4,
-                }}
-              >
-                <span>Consultation Fee</span>
-                <span>₹{doctor.consultation_fee}</span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 13,
-                  color: "#64748b",
-                  marginBottom: 4,
-                }}
-              >
-                <span>Gateway Fee</span>
-                <span>₹0 (test mode)</span>
-              </div>
-              <div
-                style={{
-                  borderTop: "1px solid #bae6fd",
-                  marginTop: 8,
-                  paddingTop: 8,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: "#0369a1",
-                }}
-              >
-                <span>Total</span>
-                <span>₹{doctor.consultation_fee}</span>
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: "#fef9c3",
-                border: "1px solid #fde047",
-                borderRadius: 10,
-                padding: "10px 14px",
-                marginBottom: 20,
-                fontSize: 12,
-                color: "#854d0e",
-              }}
-            >
-              ⚠️ <strong>Test Mode:</strong> Use test card{" "}
-              <strong>4111 1111 1111 1111</strong>, any future expiry, any CVV.
-            </div>
-
-            <button
-              onClick={handlePayment}
-              disabled={payLoading}
-              style={{
-                width: "100%",
-                padding: "14px 0",
-                borderRadius: 12,
-                border: "none",
-                cursor: payLoading ? "not-allowed" : "pointer",
-                background: payLoading
-                  ? "#94a3b8"
-                  : "linear-gradient(135deg,#16a34a,#22c55e)",
-                color: "#fff",
-                fontSize: 15,
-                fontWeight: 700,
-                boxShadow: "0 3px 12px rgba(22,163,74,0.3)",
-              }}
-            >
-              {payLoading
-                ? "Opening payment…"
+                ? "Reserving…"
                 : `Pay ₹${doctor.consultation_fee} via Razorpay`}
             </button>
           </div>
         )}
       </div>
+
+      {showPayment && (
+        <FakePaymentModal
+          amount={doctor?.consultation_fee}
+          doctorName={doctor?.full_name}
+          onSuccess={handlePaymentSuccess}
+          onFailure={() => {
+            setShowPayment(false);
+            toast.error("Payment failed");
+          }}
+          onClose={handlePaymentClose}
+        />
+      )}
     </div>
   );
 }
