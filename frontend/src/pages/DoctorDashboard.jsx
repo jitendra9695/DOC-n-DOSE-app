@@ -756,6 +756,9 @@ export default function DoctorDashboard() {
     work_end_time: "17:00",
   });
   const [tab, setTab] = useState("upcoming");
+  // Notification states
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifs, setShowNotifs] = useState(false);
 
   const load = () =>
     api
@@ -779,6 +782,11 @@ export default function DoctorDashboard() {
         });
       })
       .catch(() => setShowPF(true));
+    // Fetch notifications from backend
+    api
+      .get("/auth/doctor/notifications/")
+      .then((res) => setNotifications(res.data))
+      .catch(() => {});
   }, []);
 
   const saveProfile = async (e) => {
@@ -916,6 +924,127 @@ export default function DoctorDashboard() {
           position: "relative",
         }}
       >
+        {/* Notification Bell - placed below hero and above stats */}
+        {notifications.length > 0 && (
+          <div
+            className="max-w-6xl mx-auto px-6 pt-4"
+            style={{ marginBottom: "1rem" }}
+          >
+            <button
+              onClick={() => setShowNotifs(!showNotifs)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#EEF2FF",
+                border: "1px solid #C7D2FE",
+                color: "#4F46E5",
+                padding: "10px 18px",
+                borderRadius: "12px",
+                fontWeight: "bold",
+                fontSize: "14px",
+                transition: "all 0.2s",
+                cursor: "pointer",
+                fontFamily: F,
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "#E0E7FF")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "#EEF2FF")
+              }
+            >
+              🔔 {notifications.length} New Message
+              {notifications.length > 1 ? "s" : ""} from Admin
+            </button>
+
+            {showNotifs && (
+              <div
+                style={{
+                  marginTop: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    style={{
+                      padding: "14px 18px",
+                      borderRadius: "14px",
+                      border: "1px solid",
+                      borderColor:
+                        n.type === "warning"
+                          ? "#FEE2E2"
+                          : n.type === "suggestion"
+                            ? "#E0E7FF"
+                            : n.type === "achievement"
+                              ? "#FEF3C7"
+                              : "#E5E7EB",
+                      background:
+                        n.type === "warning"
+                          ? "#FEF2F2"
+                          : n.type === "suggestion"
+                            ? "#F5F3FF"
+                            : n.type === "achievement"
+                              ? "#FFFBEB"
+                              : "#F9FAFB",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <span
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: "bold",
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {n.type === "warning"
+                            ? "⚠️"
+                            : n.type === "suggestion"
+                              ? "💡"
+                              : n.type === "achievement"
+                                ? "🏆"
+                                : "ℹ️"}{" "}
+                          {n.type}
+                        </span>
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#374151",
+                            marginTop: "6px",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {n.message}
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: "#9CA3AF",
+                          marginLeft: "16px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {new Date(n.created_at).toLocaleDateString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Stats */}
         <div
           style={{
@@ -1182,7 +1311,9 @@ export default function DoctorDashboard() {
                 </div>
               </div>
             ) : (
-              list.map((apt) => <AptCard key={apt.id} apt={apt} />)
+              list.map((apt) => (
+                <AptCard key={apt.id} apt={apt} onDeleted={load} />
+              ))
             )}
           </div>
         </div>

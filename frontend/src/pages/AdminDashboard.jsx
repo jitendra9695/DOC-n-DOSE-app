@@ -1,1469 +1,1585 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+} from "recharts";
 
-if (!document.getElementById("gf-outfit")) {
-  const l = document.createElement("link");
-  l.id = "gf-outfit";
-  l.rel = "stylesheet";
-  l.href =
-    "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap";
-  document.head.appendChild(l);
-}
-const F = "'Outfit','DM Sans','Segoe UI',sans-serif";
-const C = {
-  navy: "#0B1F3A",
-  teal: "#0EA5BE",
-  tealDk: "#0884A0",
-  tealLt: "#E0F7FA",
-  mint: "#10B981",
-  mintLt: "#ECFDF5",
-  amber: "#F59E0B",
-  amberLt: "#FFFBEB",
-  rose: "#F43F5E",
-  roseLt: "#FFF1F2",
-  indigo: "#6366F1",
-  indigoLt: "#EEF2FF",
-  violet: "#8B5CF6",
-  violetLt: "#F5F3FF",
-  slate: "#64748B",
-  bg: "#EEF2F7",
-  card: "#FFFFFF",
-  border: "#E2E8F0",
+// ── Color Palette ────────────────────────────────────────────────────
+const COLORS = [
+  "#6366f1",
+  "#06b6d4",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+];
+const SPEC_COLORS = {
+  general: "#6366f1",
+  cardiologist: "#ef4444",
+  dermatologist: "#f59e0b",
+  neurologist: "#8b5cf6",
+  orthopedic: "#06b6d4",
+  pediatrician: "#10b981",
+  psychiatrist: "#ec4899",
+  gynecologist: "#f97316",
+  ent: "#14b8a6",
+  ophthalmologist: "#3b82f6",
+  dentist: "#84cc16",
+  urologist: "#a855f7",
 };
 
-function getMedStyle(name = "", unit = "") {
-  const n = name.toLowerCase();
-  if (
-    n.includes("paracetamol") ||
-    n.includes("ibuprofen") ||
-    n.includes("aspirin")
-  )
-    return { icon: "🌡️", color: "#F59E0B" };
-  if (
-    n.includes("amoxicillin") ||
-    n.includes("ciprofloxacin") ||
-    n.includes("azithromycin") ||
-    n.includes("metronidazole")
-  )
-    return { icon: "🦠", color: "#8B5CF6" };
-  if (
-    n.includes("vitamin") ||
-    n.includes("calcium") ||
-    n.includes("omega") ||
-    n.includes("zinc") ||
-    n.includes("iron") ||
-    n.includes("folic")
-  )
-    return { icon: "💊", color: "#10B981" };
-  if (
-    n.includes("eye") ||
-    n.includes("ear") ||
-    n.includes("nasal") ||
-    n.includes("drop")
-  )
-    return { icon: "💧", color: "#0EA5BE" };
-  if (
-    n.includes("cream") ||
-    n.includes("lotion") ||
-    n.includes("ointment") ||
-    n.includes("sunscreen")
-  )
-    return { icon: "🧴", color: "#F43F5E" };
-  if (n.includes("syrup") || n.includes("cough"))
-    return { icon: "🍶", color: "#0EA5BE" };
-  if (n.includes("insulin") || n.includes("metformin"))
-    return { icon: "🩸", color: "#F43F5E" };
-  if (n.includes("inhaler")) return { icon: "🫁", color: "#6366F1" };
-  if (
-    n.includes("thermometer") ||
-    n.includes("bandage") ||
-    n.includes("mask") ||
-    n.includes("sanitizer")
-  )
-    return { icon: "🩹", color: "#64748B" };
-  if (unit === "tablet" || unit === "capsule")
-    return { icon: "💊", color: "#0EA5BE" };
-  return { icon: "🧪", color: "#64748B" };
-}
-
-function MetricCard({ icon, label, value, color, bg, trend }) {
-  return (
-    <div
-      style={{
-        background: C.card,
-        borderRadius: 18,
-        padding: "22px",
-        border: `1px solid ${C.border}`,
-        boxShadow: "0 2px 12px #0002",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          right: -15,
-          top: -15,
-          width: 90,
-          height: 90,
-          borderRadius: "50%",
-          background: bg,
-          opacity: 0.6,
-        }}
-      />
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: C.slate,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              marginBottom: 8,
-            }}
-          >
-            {label}
-          </div>
-          <div
-            style={{
-              fontSize: 34,
-              fontWeight: 900,
-              color,
-              fontFamily: F,
-              lineHeight: 1,
-            }}
-          >
-            {value ?? "—"}
-          </div>
-          {trend && (
-            <div
-              style={{
-                fontSize: 11,
-                color: C.mint,
-                marginTop: 6,
-                fontWeight: 600,
-              }}
-            >
-              {trend}
-            </div>
-          )}
-        </div>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: bg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-          }}
-        >
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DoctorRow({ doc, onToggle }) {
-  const e = {
-    general: "🩺",
-    cardiologist: "❤️",
-    neurologist: "🧠",
-    dermatologist: "🧴",
-    orthopedic: "🦴",
-    pediatrician: "👶",
-    psychiatrist: "🧘",
-    gynecologist: "👩‍⚕️",
-    ent: "👂",
-    ophthalmologist: "👁️",
-    dentist: "🦷",
-    urologist: "🫁",
-  };
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "14px 22px",
-        borderBottom: `1px solid ${C.border}`,
-        transition: "background 0.15s",
-      }}
-      onMouseEnter={(ev) => (ev.currentTarget.style.background = "#F8FAFC")}
-      onMouseLeave={(ev) => (ev.currentTarget.style.background = "")}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            background: `linear-gradient(135deg,${C.navy},#1A4D6E)`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 20,
-          }}
-        >
-          {e[doc.specialization] || "🩺"}
-        </div>
-        <div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 14,
-              color: C.navy,
-              fontFamily: F,
-            }}
-          >
-            {doc.full_name}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: C.slate,
-              textTransform: "capitalize",
-            }}
-          >
-            {doc.specialization} · {doc.experience_years}yr · ₹
-            {doc.consultation_fee}
-          </div>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <span
-          style={{
-            background: doc.is_approved ? C.mintLt : C.amberLt,
-            color: doc.is_approved ? C.mint : C.amber,
-            borderRadius: 999,
-            padding: "3px 12px",
-            fontSize: 11,
-            fontWeight: 700,
-          }}
-        >
-          {doc.is_approved ? "✅ Approved" : "⏳ Pending"}
-        </span>
-        <button
-          onClick={() => onToggle(doc.id, !doc.is_approved)}
-          style={{
-            padding: "6px 14px",
-            borderRadius: 10,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: F,
-            background: doc.is_approved
-              ? C.roseLt
-              : `linear-gradient(135deg,${C.tealDk},${C.teal})`,
-            color: doc.is_approved ? C.rose : "#fff",
-          }}
-        >
-          {doc.is_approved ? "Revoke" : "Approve"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function UserRow({ u, onToggle }) {
-  const rc = {
-    admin: [C.violetLt, C.violet],
-    doctor: [C.tealLt, C.tealDk],
-    patient: [C.mintLt, C.mint],
-  }[u.role] || [C.bg, C.slate];
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "13px 22px",
-        borderBottom: `1px solid ${C.border}`,
-        transition: "background 0.15s",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            background: `linear-gradient(135deg,${rc[1]}33,${rc[1]}66)`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-            fontWeight: 800,
-            color: rc[1],
-            fontFamily: F,
-          }}
-        >
-          {u.username.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 13,
-              color: C.navy,
-              fontFamily: F,
-            }}
-          >
-            {u.username}
-          </div>
-          <div style={{ fontSize: 11, color: C.slate }}>{u.email}</div>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <span
-          style={{
-            background: rc[0],
-            color: rc[1],
-            borderRadius: 999,
-            padding: "2px 10px",
-            fontSize: 11,
-            fontWeight: 700,
-            textTransform: "capitalize",
-          }}
-        >
-          {u.role}
-        </span>
-        <span
-          style={{
-            background: u.is_active ? C.mintLt : C.roseLt,
-            color: u.is_active ? C.mint : C.rose,
-            borderRadius: 999,
-            padding: "2px 10px",
-            fontSize: 11,
-            fontWeight: 700,
-          }}
-        >
-          {u.is_active ? "Active" : "Inactive"}
-        </span>
-        {u.role !== "admin" && (
-          <button
-            onClick={() => onToggle(u.id, u.is_active)}
-            style={{
-              padding: "5px 12px",
-              borderRadius: 8,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 700,
-              background: u.is_active ? C.roseLt : C.mintLt,
-              color: u.is_active ? C.rose : C.mint,
-            }}
-          >
-            {u.is_active ? "Disable" : "Enable"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MedicineTab() {
-  const [medicines, setMedicines] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editMed, setEditMed] = useState(null);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    price: "",
-    stock: "",
-    unit: "tablet",
-    manufacturer: "",
-  });
-  const units = [
-    "tablet",
-    "capsule",
-    "syrup",
-    "injection",
-    "cream",
-    "drops",
-    "piece",
-  ];
-  const load = () =>
-    api
-      .get("/pharmacy/inventory/")
-      .then((r) => setMedicines(r.data))
-      .catch(() => {});
-  useEffect(() => {
-    load();
-  }, []);
-  const openAdd = () => {
-    setForm({
-      name: "",
-      description: "",
-      price: "",
-      stock: "",
-      unit: "tablet",
-      manufacturer: "",
-    });
-    setEditMed(null);
-    setShowForm(true);
-  };
-  const openEdit = (m) => {
-    setForm({
-      name: m.name,
-      description: m.description || "",
-      price: m.price,
-      stock: m.stock,
-      unit: m.unit || "tablet",
-      manufacturer: m.manufacturer || "",
-    });
-    setEditMed(m);
-    setShowForm(true);
-  };
-  const save = async (e) => {
-    e.preventDefault();
-    if (!form.name || !form.price || form.stock === "")
-      return toast.error("Name, price & stock required");
-    setSaving(true);
-    try {
-      if (editMed)
-        await api.patch(`/pharmacy/inventory/${editMed.id}/`, {
-          stock: parseInt(form.stock),
-          price: parseFloat(form.price),
-        });
-      else
-        await api.post("/pharmacy/inventory/", {
-          ...form,
-          price: parseFloat(form.price),
-          stock: parseInt(form.stock),
-        });
-      toast.success(editMed ? "Updated!" : "Added!");
-      setShowForm(false);
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-  const filtered = medicines.filter(
-    (m) =>
-      m.name?.toLowerCase().includes(search.toLowerCase()) ||
-      m.manufacturer?.toLowerCase().includes(search.toLowerCase()),
-  );
-  return (
-    <div>
-      {/* Mini stats */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4,1fr)",
-          gap: 12,
-          padding: "18px 22px",
-          borderBottom: `1px solid ${C.border}`,
-        }}
-      >
-        {[
-          {
-            icon: "💊",
-            label: "Total",
-            value: medicines.length,
-            color: C.teal,
-          },
-          {
-            icon: "✅",
-            label: "Available",
-            value: medicines.filter((m) => m.is_available).length,
-            color: C.mint,
-          },
-          {
-            icon: "❌",
-            label: "Out of Stock",
-            value: medicines.filter((m) => !m.is_available).length,
-            color: C.rose,
-          },
-          {
-            icon: "⚠️",
-            label: "Low (≤10)",
-            value: medicines.filter((m) => m.stock > 0 && m.stock <= 10).length,
-            color: C.amber,
-          },
-        ].map((s) => (
-          <div
-            key={s.label}
-            style={{
-              background: C.bg,
-              borderRadius: 12,
-              padding: "12px 14px",
-              border: `1px solid ${C.border}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 900,
-                color: s.color,
-                fontFamily: F,
-              }}
-            >
-              {s.value}
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: C.slate,
-                marginTop: 2,
-              }}
-            >
-              {s.icon} {s.label}
-            </div>
-          </div>
+// ── Custom Tooltip ───────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label, prefix = "₹" }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 shadow-2xl">
+        <p className="text-gray-400 text-xs mb-2">{label}</p>
+        {payload.map((p, i) => (
+          <p key={i} style={{ color: p.color }} className="text-sm font-bold">
+            {p.name}: {prefix}
+            {typeof p.value === "number"
+              ? p.value.toLocaleString("en-IN")
+              : p.value}
+          </p>
         ))}
       </div>
-      {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          padding: "12px 22px",
-          borderBottom: `1px solid ${C.border}`,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ position: "relative", flex: 1 }}>
-          <span
-            style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              pointerEvents: "none",
-            }}
-          >
-            🔍
-          </span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search medicines…"
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "8px 14px 8px 34px",
-              borderRadius: 10,
-              border: `1.5px solid ${C.border}`,
-              fontSize: 13,
-              outline: "none",
-              fontFamily: F,
-            }}
-            onFocus={(e) => (e.target.style.borderColor = C.teal)}
-            onBlur={(e) => (e.target.style.borderColor = C.border)}
-          />
-        </div>
-        <span style={{ fontSize: 12, color: C.slate, fontWeight: 600 }}>
-          {filtered.length}
-        </span>
-        <button
-          onClick={openAdd}
-          style={{
-            background: `linear-gradient(135deg,${C.tealDk},${C.teal})`,
-            color: "#fff",
-            border: "none",
-            borderRadius: 10,
-            padding: "8px 18px",
-            fontWeight: 800,
-            fontSize: 13,
-            cursor: "pointer",
-            fontFamily: F,
-            whiteSpace: "nowrap",
-          }}
-        >
-          + Add Medicine
-        </button>
-      </div>
-      {/* Form */}
-      {showForm && (
+    );
+  }
+  return null;
+};
+
+// ── KPI Card ─────────────────────────────────────────────────────────
+const KpiCard = ({ icon, label, value, sub, color, trend }) => (
+  <div
+    className={`relative overflow-hidden rounded-2xl p-5 ${color} text-white`}
+  >
+    <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-white/10 -translate-y-6 translate-x-6" />
+    <div className="absolute bottom-0 right-4 w-16 h-16 rounded-full bg-white/5 translate-y-4" />
+    <div className="relative">
+      <div className="text-3xl mb-2">{icon}</div>
+      <div className="text-2xl font-black tracking-tight">{value}</div>
+      <div className="text-sm opacity-80 font-medium">{label}</div>
+      {sub && <div className="text-xs opacity-60 mt-1">{sub}</div>}
+      {trend !== undefined && (
         <div
-          style={{
-            padding: "18px 22px",
-            borderBottom: `1px solid ${C.border}`,
-            background: "#F0F9FF",
-          }}
+          className={`text-xs mt-2 font-bold ${trend >= 0 ? "text-green-300" : "text-red-300"}`}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
-            <span
-              style={{
-                fontWeight: 800,
-                fontSize: 14,
-                color: C.navy,
-                fontFamily: F,
-              }}
-            >
-              {editMed ? "✏️ Edit" : "➕ Add New Medicine"}
-            </span>
+          {trend >= 0 ? "↑" : "↓"} {Math.abs(trend)}% vs last week
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// ── Section Header ────────────────────────────────────────────────────
+const SectionHeader = ({ icon, title, subtitle }) => (
+  <div className="flex items-center gap-3 mb-6">
+    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">
+      {icon}
+    </div>
+    <div>
+      <h2 className="text-xl font-black text-gray-900">{title}</h2>
+      {subtitle && <p className="text-gray-400 text-sm">{subtitle}</p>}
+    </div>
+  </div>
+);
+
+// ── Chart Card ────────────────────────────────────────────────────────
+const ChartCard = ({ title, children, action }) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="flex justify-between items-center mb-5">
+      <h3 className="font-black text-gray-800 text-base">{title}</h3>
+      {action}
+    </div>
+    {children}
+  </div>
+);
+
+// ── Notification Modal ────────────────────────────────────────────────
+const NotificationModal = ({ doctors, onClose, onSend }) => {
+  const [form, setForm] = useState({
+    doctor_id: "",
+    message: "",
+    type: "suggestion",
+  });
+  const [loading, setLoading] = useState(false);
+
+  const templates = {
+    fee_increase: (name) =>
+      `Dear ${name}, Based on your excellent performance and high patient satisfaction, we recommend increasing your consultation fee by ₹100-200 to reflect your expertise.`,
+    fee_decrease: (name) =>
+      `Dear ${name}, To attract more patients and increase your appointment volume, consider reducing your consultation fee slightly for the next 30 days.`,
+    performance: (name) =>
+      `Dear ${name}, Congratulations! Your appointment completion rate is excellent. Keep up the great work!`,
+    availability: (name) =>
+      `Dear ${name}, We noticed your available slots are filling up quickly. Consider extending your working hours to accommodate more patients.`,
+    warning: (name) =>
+      `Dear ${name}, Your approval rate for appointments has been lower than expected. Please review your availability and response time.`,
+  };
+
+  const fillTemplate = (key) => {
+    const doc = doctors.find((d) => d.id === parseInt(form.doctor_id));
+    const name = doc ? doc.name : "Doctor";
+    setForm((f) => ({ ...f, message: templates[key](name) }));
+  };
+
+  const handleSend = async () => {
+    if (!form.message.trim()) return toast.error("Message likhein");
+    setLoading(true);
+    try {
+      await api.post("/auth/admin/notifications/", {
+        doctor_id: form.doctor_id || null,
+        message: form.message,
+        type: form.type,
+      });
+      toast.success("Notification sent! ✅");
+      onSend();
+      onClose();
+    } catch {
+      toast.error("Failed to send");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-white text-xl font-black">
+                Send Notification / Suggestion
+              </h2>
+              <p className="text-indigo-200 text-sm">
+                Direct message to doctors from admin
+              </p>
+            </div>
             <button
-              onClick={() => setShowForm(false)}
-              style={{
-                background: C.bg,
-                border: `1px solid ${C.border}`,
-                borderRadius: 8,
-                padding: "4px 12px",
-                cursor: "pointer",
-                fontSize: 12,
-                color: C.slate,
-              }}
+              onClick={onClose}
+              className="text-white/70 hover:text-white text-2xl font-light"
             >
-              Cancel
+              ✕
             </button>
           </div>
-          <form
-            onSubmit={save}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3,1fr)",
-              gap: 10,
-            }}
-          >
-            <div style={{ gridColumn: "1/-1" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: C.slate,
-                  marginBottom: 3,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                }}
-              >
-                Medicine Name *
-              </label>
-              <input
-                type="text"
-                value={form.name}
-                disabled={!!editMed}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${C.border}`,
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: F,
-                  background: editMed ? "#F8FAFC" : C.card,
-                }}
-                onFocus={(e) => {
-                  if (!editMed) e.target.style.borderColor = C.teal;
-                }}
-                onBlur={(e) => (e.target.style.borderColor = C.border)}
-              />
-            </div>
-            {[
-              { l: "Manufacturer", k: "manufacturer", t: "text" },
-              { l: "Price (₹) *", k: "price", t: "number" },
-              { l: "Stock *", k: "stock", t: "number" },
-            ].map((f) => (
-              <div key={f.k}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: C.slate,
-                    marginBottom: 3,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  {f.l}
-                </label>
-                <input
-                  type={f.t}
-                  value={form[f.k]}
-                  onChange={(e) => setForm({ ...form, [f.k]: e.target.value })}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: `1.5px solid ${C.border}`,
-                    fontSize: 13,
-                    outline: "none",
-                    fontFamily: F,
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = C.teal)}
-                  onBlur={(e) => (e.target.style.borderColor = C.border)}
-                />
-              </div>
-            ))}
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: C.slate,
-                  marginBottom: 3,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                }}
-              >
-                Unit
+              <label className="text-sm font-bold text-gray-700 mb-1 block">
+                Send To
               </label>
               <select
-                value={form.unit}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${C.border}`,
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: F,
-                }}
+                value={form.doctor_id}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, doctor_id: e.target.value }))
+                }
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-indigo-500 outline-none text-sm"
               >
-                {units.map((u) => (
-                  <option key={u} value={u}>
-                    {u.charAt(0).toUpperCase() + u.slice(1)}
+                <option value="">📢 All Doctors (Broadcast)</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} — {d.specialization}
                   </option>
                 ))}
               </select>
             </div>
-            <div style={{ gridColumn: "1/-1" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: C.slate,
-                  marginBottom: 3,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                }}
-              >
-                Description
-              </label>
-              <textarea
-                rows={2}
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${C.border}`,
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: F,
-                  resize: "vertical",
-                }}
-                onFocus={(e) => (e.target.style.borderColor = C.teal)}
-                onBlur={(e) => (e.target.style.borderColor = C.border)}
-              />
-            </div>
             <div>
-              <button
-                type="submit"
-                disabled={saving}
-                style={{
-                  padding: "9px 22px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: saving
-                    ? "#94A3B8"
-                    : `linear-gradient(135deg,${C.tealDk},${C.teal})`,
-                  color: "#fff",
-                  fontWeight: 800,
-                  fontSize: 13,
-                  cursor: saving ? "not-allowed" : "pointer",
-                  fontFamily: F,
-                }}
+              <label className="text-sm font-bold text-gray-700 mb-1 block">
+                Type
+              </label>
+              <select
+                value={form.type}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, type: e.target.value }))
+                }
+                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-indigo-500 outline-none text-sm"
               >
-                {saving ? "Saving…" : editMed ? "Update" : "Add Medicine"}
-              </button>
+                <option value="suggestion">💡 Suggestion</option>
+                <option value="info">ℹ️ Information</option>
+                <option value="warning">⚠️ Warning</option>
+                <option value="achievement">🏆 Achievement</option>
+              </select>
             </div>
-          </form>
-        </div>
-      )}
-      {/* List */}
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px", color: C.slate }}>
-          No medicines found
-        </div>
-      ) : (
-        filtered.map((med) => {
-          const { icon, color } = getMedStyle(med.name, med.unit);
-          const isLow = med.stock > 0 && med.stock <= 10;
-          return (
-            <div
-              key={med.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                padding: "12px 22px",
-                borderBottom: `1px solid ${C.border}`,
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#F8FAFC")
+          </div>
+
+          <div>
+            <label className="text-sm font-bold text-gray-700 mb-2 block">
+              Quick Templates
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: "fee_increase", label: "📈 Increase Fee" },
+                { key: "fee_decrease", label: "📉 Reduce Fee" },
+                { key: "performance", label: "🏆 Great Work" },
+                { key: "availability", label: "⏰ Extend Hours" },
+                { key: "warning", label: "⚠️ Low Response" },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => fillTemplate(t.key)}
+                  className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition font-medium"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-bold text-gray-700 mb-1 block">
+              Message
+            </label>
+            <textarea
+              value={form.message}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, message: e.target.value }))
               }
-              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-            >
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: `${color}18`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 18,
-                  flexShrink: 0,
-                }}
-              >
-                {icon}
-              </div>
-              <div style={{ flex: 2, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 13,
-                    color: C.navy,
-                    fontFamily: F,
-                  }}
-                >
-                  {med.name}
-                </div>
-                <div style={{ fontSize: 11, color: C.slate }}>
-                  {med.manufacturer} · {med.unit}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 14,
-                  color,
-                  fontFamily: F,
-                  minWidth: 55,
-                  textAlign: "right",
-                }}
-              >
-                ₹{med.price}
-              </div>
-              <div style={{ minWidth: 110, textAlign: "center" }}>
-                <span
-                  style={{
-                    background: !med.is_available
-                      ? C.roseLt
-                      : isLow
-                        ? C.amberLt
-                        : C.mintLt,
-                    color: !med.is_available
-                      ? C.rose
-                      : isLow
-                        ? C.amber
-                        : C.mint,
-                    borderRadius: 999,
-                    padding: "3px 10px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                  }}
-                >
-                  {!med.is_available
-                    ? "Out of stock"
-                    : isLow
-                      ? `⚠️ Low: ${med.stock}`
-                      : `${med.stock} in stock`}
-                </span>
-              </div>
-              <button
-                onClick={() => openEdit(med)}
-                style={{
-                  background: C.tealLt,
-                  color: C.tealDk,
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "5px 12px",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: F,
-                }}
-              >
-                ✏️ Edit
-              </button>
+              rows={5}
+              className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-indigo-500 outline-none text-sm resize-none"
+              placeholder="Type your message or use a template above..."
+            />
+            <div className="text-right text-xs text-gray-400 mt-1">
+              {form.message.length} chars
             </div>
-          );
-        })
-      )}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSend}
+              disabled={loading}
+              className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50"
+            >
+              {loading ? "⏳ Sending..." : "📤 Send Notification"}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-6 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
+};
 
+// ── MAIN DASHBOARD ────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const [stats, setStats] = useState(null);
-  const [doctors, setDoctors] = useState([]);
-  const [users, setUsers] = useState([]);
   const [tab, setTab] = useState("overview");
-  const [search, setSearch] = useState("");
-  const reload = () => {
-    api.get("/auth/admin/dashboard/").then((r) => setStats(r.data));
-    api.get("/doctors/admin/all/").then((r) => setDoctors(r.data));
-    api.get("/auth/admin/users/").then((r) => setUsers(r.data));
-  };
-  useEffect(reload, []);
-  const approveDoctor = async (id, val) => {
+  const [stats, setStats] = useState(null);
+  const [revenueData, setRevenueData] = useState(null);
+  const [doctorData, setDoctorData] = useState(null);
+  const [medicineData, setMedicineData] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const [s, r, d, m, u, n] = await Promise.all([
+          api.get("/auth/admin/dashboard/"),
+          api.get("/auth/admin/analytics/revenue/"),
+          api.get("/auth/admin/analytics/doctors/"),
+          api.get("/auth/admin/analytics/medicines/"),
+          api.get("/auth/admin/users/"),
+          api.get("/auth/admin/notifications/"),
+        ]);
+        setStats(s.data);
+        setRevenueData(r.data);
+        setDoctorData(d.data);
+        setMedicineData(m.data);
+        setUsers(u.data);
+        setNotifications(n.data);
+      } catch (e) {
+        toast.error("Failed to load analytics");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  const approveDoctor = async (doctorId, approve) => {
     try {
-      await api.patch(`/doctors/admin/${id}/approve/`, { is_approved: val });
-      toast.success(val ? "Doctor approved!" : "Access revoked");
-      reload();
-    } catch {
-      toast.error("Action failed");
-    }
-  };
-  const toggleUser = async (id, cur) => {
-    try {
-      await api.patch(`/auth/admin/users/${id}/`, { is_active: !cur });
-      toast.success("User status updated");
-      reload();
+      await api.patch(`/doctors/admin/${doctorId}/approve/`, {
+        is_approved: approve,
+      });
+      toast.success(approve ? "✅ Doctor approved!" : "🚫 Access revoked");
+      const d = await api.get("/auth/admin/analytics/doctors/");
+      setDoctorData(d.data);
+      const s = await api.get("/auth/admin/dashboard/");
+      setStats(s.data);
     } catch {
       toast.error("Failed");
     }
   };
-  const filteredDocs = doctors.filter(
-    (d) =>
-      d.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      d.specialization?.includes(search.toLowerCase()),
-  );
-  const filteredUsers = users.filter(
-    (u) =>
-      u.username?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase()),
-  );
-  const pendingDocs = doctors.filter((d) => !d.is_approved);
-  const TABS = [
-    { key: "overview", icon: "📊", label: "Overview" },
-    { key: "doctors", icon: "👨‍⚕️", label: "Doctors", badge: pendingDocs.length },
-    { key: "users", icon: "👥", label: "Users" },
-    { key: "medicines", icon: "💊", label: "Medicines" },
+
+  const toggleUser = async (userId, status) => {
+    try {
+      await api.patch(`/auth/admin/users/${userId}/`, { is_active: !status });
+      toast.success("User updated!");
+      const u = await api.get("/auth/admin/users/");
+      setUsers(u.data);
+    } catch {
+      toast.error("Failed");
+    }
+  };
+
+  const tabs = [
+    { id: "overview", icon: "📊", label: "Overview" },
+    { id: "financial", icon: "💰", label: "Financial" },
+    { id: "doctors", icon: "👨‍⚕️", label: "Doctors" },
+    { id: "medicines", icon: "💊", label: "Medicines" },
+    { id: "users", icon: "👥", label: "Users" },
+    { id: "notifications", icon: "🔔", label: "Notifications" },
   ];
-  return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: F }}>
-      <Navbar />
-      <div
-        style={{
-          background: `linear-gradient(135deg,${C.navy} 0%,#0F2D5A 60%,#1E3A5F 100%)`,
-          padding: "32px 0 88px",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            right: -80,
-            top: -80,
-            width: 340,
-            height: 340,
-            borderRadius: "50%",
-            background: "rgba(99,102,241,0.1)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            maxWidth: 1060,
-            margin: "0 auto",
-            padding: "0 24px",
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              color: "rgba(255,255,255,0.4)",
-              fontWeight: 600,
-              letterSpacing: 2,
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            Admin Control Center
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="inline-block w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+            <p className="text-gray-500 font-medium">Loading Analytics...</p>
           </div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 28,
-              fontWeight: 900,
-              color: "#fff",
-              fontFamily: F,
-            }}
-          >
-            DocNDoSe <span style={{ color: C.teal }}>Dashboard</span> 🛡️
-          </h1>
-          <p
-            style={{
-              margin: "8px 0 0",
-              color: "rgba(255,255,255,0.45)",
-              fontSize: 13,
-            }}
-          >
-            Full system oversight — doctors, users, appointments & medicines
-          </p>
         </div>
       </div>
-      <div
-        style={{
-          maxWidth: 1060,
-          margin: "-56px auto 0",
-          padding: "0 24px 48px",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4,1fr)",
-            gap: 14,
-            marginBottom: 24,
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+
+      {showNotifModal && doctorData && (
+        <NotificationModal
+          doctors={doctorData.doctors}
+          onClose={() => setShowNotifModal(false)}
+          onSend={async () => {
+            const n = await api.get("/auth/admin/notifications/");
+            setNotifications(n.data);
           }}
-        >
-          <MetricCard
-            icon="👥"
-            label="Total Users"
-            value={stats?.total_users}
-            color={C.teal}
-            bg={C.tealLt}
-            trend="All registered accounts"
-          />
-          <MetricCard
-            icon="👨‍⚕️"
-            label="Total Doctors"
-            value={stats?.total_doctors}
-            color={C.mint}
-            bg={C.mintLt}
-            trend={`${stats?.approved_doctors || 0} approved`}
-          />
-          <MetricCard
-            icon="⏳"
-            label="Pending Approval"
-            value={stats?.pending_doctors}
-            color={C.amber}
-            bg={C.amberLt}
-            trend="Requires your action"
-          />
-          <MetricCard
-            icon="📋"
-            label="Appointments"
-            value={stats?.total_appointments}
-            color={C.indigo}
-            bg={C.indigoLt}
-            trend={`${stats?.confirmed_appointments || 0} confirmed`}
-          />
-        </div>
-        {pendingDocs.length > 0 && (
-          <div
-            style={{
-              background: "linear-gradient(135deg,#FEF3C7,#FFFBEB)",
-              border: "1.5px solid #FDE68A",
-              borderRadius: 16,
-              padding: "16px 20px",
-              marginBottom: 22,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-            }}
+        />
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-gray-900">
+              Admin Command Center <span className="text-indigo-600">🛡️</span>
+            </h1>
+            <p className="text-gray-500 mt-1">
+              Real-time analytics · DocNDoSe Healthcare Platform
+            </p>
+          </div>
+          <button
+            onClick={() => setShowNotifModal(true)}
+            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-xl font-bold hover:opacity-90 transition shadow-lg"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 12,
-                  background: "#FEF3C7",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 22,
-                }}
-              >
-                ⚠️
-              </div>
-              <div>
-                <div
-                  style={{
-                    fontWeight: 800,
-                    fontSize: 14,
-                    color: "#92400E",
-                    fontFamily: F,
-                  }}
-                >
-                  {pendingDocs.length} Doctor{pendingDocs.length > 1 ? "s" : ""}{" "}
-                  Pending Approval
-                </div>
-                <div style={{ fontSize: 12, color: "#B45309" }}>
-                  Review and approve to allow them to appear in patient listings
-                </div>
-              </div>
-            </div>
+            <span>📤</span> Send Notification
+          </button>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-1 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-100 mb-8 overflow-x-auto">
+          {tabs.map((t) => (
             <button
-              onClick={() => setTab("doctors")}
-              style={{
-                background: C.amber,
-                color: "#fff",
-                border: "none",
-                borderRadius: 10,
-                padding: "8px 18px",
-                fontWeight: 800,
-                cursor: "pointer",
-                fontSize: 13,
-                fontFamily: F,
-              }}
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap flex-1 justify-center ${
+                tab === t.id
+                  ? "bg-indigo-600 text-white shadow-md"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              }`}
             >
-              Review Now →
+              <span>{t.icon}</span>
+              <span className="hidden sm:inline">{t.label}</span>
             </button>
+          ))}
+        </div>
+
+        {/* ── OVERVIEW TAB ─────────────────────────────────────── */}
+        {tab === "overview" && stats && (
+          <div className="space-y-8">
+            {/* KPI Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <KpiCard
+                icon="💰"
+                label="Total Revenue"
+                value={`₹${(stats.total_revenue / 1000).toFixed(1)}K`}
+                sub={`₹${stats.revenue_7d.toFixed(0)} this week`}
+                color="bg-gradient-to-br from-indigo-500 to-indigo-700"
+              />
+              <KpiCard
+                icon="📅"
+                label="Total Appointments"
+                value={stats.total_appointments}
+                sub={`${stats.today_appointments} today`}
+                color="bg-gradient-to-br from-cyan-500 to-cyan-700"
+              />
+              <KpiCard
+                icon="👨‍⚕️"
+                label="Active Doctors"
+                value={stats.approved_doctors}
+                sub={`${stats.pending_doctors} pending`}
+                color="bg-gradient-to-br from-emerald-500 to-emerald-700"
+              />
+              <KpiCard
+                icon="👥"
+                label="Total Users"
+                value={stats.total_users}
+                sub={`${stats.new_users_7d} new this week`}
+                color="bg-gradient-to-br from-violet-500 to-violet-700"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <KpiCard
+                icon="✅"
+                label="Confirmed"
+                value={stats.confirmed_appointments}
+                color="bg-gradient-to-br from-green-400 to-green-600"
+              />
+              <KpiCard
+                icon="🏁"
+                label="Completed"
+                value={stats.completed_appointments}
+                color="bg-gradient-to-br from-blue-400 to-blue-600"
+              />
+              <KpiCard
+                icon="💊"
+                label="Orders"
+                value={stats.total_orders}
+                color="bg-gradient-to-br from-orange-400 to-orange-600"
+              />
+              <KpiCard
+                icon="🏪"
+                label="Medicine Rev"
+                value={`₹${(stats.medicine_revenue / 1000).toFixed(1)}K`}
+                color="bg-gradient-to-br from-pink-400 to-pink-600"
+              />
+            </div>
+
+            {/* Revenue Chart */}
+            {revenueData && (
+              <ChartCard title="📈 Revenue Trend (Last 30 Days)">
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={revenueData.daily_revenue}>
+                    <defs>
+                      <linearGradient
+                        id="gradConsult"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#6366f1"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#6366f1"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient id="gradMed" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="5%"
+                          stopColor="#10b981"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#10b981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      tickLine={false}
+                      tickFormatter={(v) =>
+                        `₹${v >= 1000 ? (v / 1000).toFixed(0) + "K" : v}`
+                      }
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="consultation_revenue"
+                      name="Consultation"
+                      stroke="#6366f1"
+                      strokeWidth={2.5}
+                      fill="url(#gradConsult)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="medicine_revenue"
+                      name="Medicine"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      fill="url(#gradMed)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            )}
+
+            {/* Quick Stats Row */}
+            {revenueData && (
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                    Payment Health
+                  </div>
+                  {[
+                    {
+                      label: "Successful",
+                      val: revenueData.payment_stats.successful,
+                      color: "bg-green-500",
+                    },
+                    {
+                      label: "Failed",
+                      val: revenueData.payment_stats.failed,
+                      color: "bg-red-500",
+                    },
+                    {
+                      label: "Pending",
+                      val: revenueData.payment_stats.pending,
+                      color: "bg-yellow-500",
+                    },
+                  ].map((s) => {
+                    const total =
+                      revenueData.payment_stats.successful +
+                        revenueData.payment_stats.failed +
+                        revenueData.payment_stats.pending || 1;
+                    return (
+                      <div key={s.label} className="mb-3">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600 font-medium">
+                            {s.label}
+                          </span>
+                          <span className="font-black text-gray-900">
+                            {s.val}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${s.color} rounded-full transition-all`}
+                            style={{ width: `${(s.val / total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {doctorData && (
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                      Top Earner Doctor
+                    </div>
+                    {revenueData.top_earning_doctors.slice(0, 4).map((d, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between items-center mb-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white`}
+                            style={{ background: COLORS[i] }}
+                          >
+                            {i + 1}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-gray-800 leading-tight">
+                              {d.name.replace("Dr. ", "")}
+                            </div>
+                            <div className="text-xs text-gray-400 capitalize">
+                              {d.specialization}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-black text-indigo-600">
+                            ₹{d.total_earned.toLocaleString("en-IN")}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {d.appointments} apts
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {medicineData && (
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                      Medicine Stock Status
+                    </div>
+                    {[
+                      {
+                        label: "✅ Good Stock",
+                        val:
+                          medicineData.summary.available -
+                          medicineData.summary.low_stock,
+                        color: "#10b981",
+                      },
+                      {
+                        label: "⚠️ Low Stock",
+                        val: medicineData.summary.low_stock,
+                        color: "#f59e0b",
+                      },
+                      {
+                        label: "❌ Out of Stock",
+                        val: medicineData.summary.out_of_stock,
+                        color: "#ef4444",
+                      },
+                    ].map((s) => (
+                      <div
+                        key={s.label}
+                        className="flex justify-between items-center mb-3"
+                      >
+                        <span className="text-sm text-gray-600">{s.label}</span>
+                        <span
+                          className="font-black text-lg"
+                          style={{ color: s.color }}
+                        >
+                          {s.val}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="border-t pt-3 mt-1">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-400">
+                          Medicine Revenue
+                        </span>
+                        <span className="text-sm font-black text-green-600">
+                          ₹
+                          {medicineData.summary.total_revenue.toLocaleString(
+                            "en-IN",
+                            { maximumFractionDigits: 0 },
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
-        <div
-          style={{
-            background: C.card,
-            borderRadius: 20,
-            border: `1px solid ${C.border}`,
-            overflow: "hidden",
-            boxShadow: "0 1px 6px #0001",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              borderBottom: `1px solid ${C.border}`,
-              background: "#F8FAFC",
-            }}
-          >
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => {
-                  setTab(t.key);
-                  setSearch("");
-                }}
-                style={{
-                  flex: 1,
-                  padding: "15px 8px",
-                  border: "none",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  fontFamily: F,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  background: tab === t.key ? C.card : "transparent",
-                  color: tab === t.key ? C.teal : C.slate,
-                  borderBottom:
-                    tab === t.key
-                      ? `3px solid ${C.teal}`
-                      : "3px solid transparent",
-                  transition: "all 0.2s",
-                }}
-              >
-                <span>{t.icon}</span>
-                <span>{t.label}</span>
-                {t.badge > 0 && (
-                  <span
-                    style={{
-                      background: C.amber,
-                      color: "#fff",
-                      borderRadius: 999,
-                      padding: "1px 7px",
-                      fontSize: 11,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {t.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+
+        {/* ── FINANCIAL TAB ─────────────────────────────────────── */}
+        {tab === "financial" && revenueData && (
+          <div className="space-y-6">
+            <SectionHeader
+              icon="💰"
+              title="Financial Dashboard"
+              subtitle="Revenue, payments & transaction analysis"
+            />
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                {
+                  label: "Total Revenue",
+                  val: `₹${stats.total_revenue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                  icon: "💵",
+                  color: "from-indigo-500 to-indigo-700",
+                },
+                {
+                  label: "30-Day Revenue",
+                  val: `₹${stats.revenue_30d.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                  icon: "📆",
+                  color: "from-cyan-500 to-cyan-700",
+                },
+                {
+                  label: "7-Day Revenue",
+                  val: `₹${stats.revenue_7d.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                  icon: "📅",
+                  color: "from-emerald-500 to-emerald-700",
+                },
+                {
+                  label: "Medicine Revenue",
+                  val: `₹${stats.medicine_revenue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                  icon: "💊",
+                  color: "from-violet-500 to-violet-700",
+                },
+              ].map((k) => (
+                <KpiCard
+                  key={k.label}
+                  icon={k.icon}
+                  label={k.label}
+                  value={k.val}
+                  color={`bg-gradient-to-br ${k.color}`}
+                />
+              ))}
+            </div>
+
+            <ChartCard title="💹 Daily Revenue Breakdown (Last 30 Days)">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={revenueData.daily_revenue} barGap={2}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#f0f0f0"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: "#9ca3af" }}
+                    tickLine={false}
+                    interval={4}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                    tickLine={false}
+                    tickFormatter={(v) =>
+                      `₹${v >= 1000 ? (v / 1000).toFixed(0) + "K" : v}`
+                    }
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar
+                    dataKey="consultation_revenue"
+                    name="Consultation"
+                    fill="#6366f1"
+                    radius={[3, 3, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="medicine_revenue"
+                    name="Medicine"
+                    fill="#10b981"
+                    radius={[3, 3, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <ChartCard title="🎯 Payment Status Distribution">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        {
+                          name: "Successful",
+                          value: revenueData.payment_stats.successful,
+                        },
+                        {
+                          name: "Failed",
+                          value: revenueData.payment_stats.failed,
+                        },
+                        {
+                          name: "Pending",
+                          value: revenueData.payment_stats.pending,
+                        },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={95}
+                      innerRadius={55}
+                      dataKey="value"
+                      nameKey="name"
+                      label={({ name, percent }) =>
+                        `${name} ${(percent * 100).toFixed(0)}%`
+                      }
+                      labelLine={false}
+                    >
+                      <Cell fill="#10b981" />
+                      <Cell fill="#ef4444" />
+                      <Cell fill="#f59e0b" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex justify-around mt-2">
+                  {[
+                    {
+                      label: "Success",
+                      val: revenueData.payment_stats.successful,
+                      c: "text-green-600",
+                    },
+                    {
+                      label: "Failed",
+                      val: revenueData.payment_stats.failed,
+                      c: "text-red-500",
+                    },
+                    {
+                      label: "Pending",
+                      val: revenueData.payment_stats.pending,
+                      c: "text-yellow-500",
+                    },
+                  ].map((s) => (
+                    <div key={s.label} className="text-center">
+                      <div className={`text-2xl font-black ${s.c}`}>
+                        {s.val}
+                      </div>
+                      <div className="text-xs text-gray-400">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </ChartCard>
+
+              <ChartCard title="🏆 Top Earning Doctors">
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {revenueData.top_earning_doctors.map((d, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black text-white flex-shrink-0"
+                        style={{ background: COLORS[i % COLORS.length] }}
+                      >
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold text-gray-800 truncate">
+                            {d.name}
+                          </span>
+                          <span className="text-sm font-black text-indigo-600 ml-2">
+                            ₹{d.total_earned.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${(d.total_earned / (revenueData.top_earning_doctors[0]?.total_earned || 1)) * 100}%`,
+                              background: COLORS[i % COLORS.length],
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5 capitalize">
+                          {d.specialization} · {d.appointments} appointments
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ChartCard>
+            </div>
           </div>
-          {tab === "overview" && stats && (
-            <div style={{ padding: "24px" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 16,
-                }}
-              >
-                <div
-                  style={{
-                    background: C.bg,
-                    borderRadius: 16,
-                    padding: "20px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: C.navy,
-                      marginBottom: 14,
-                      fontFamily: F,
-                    }}
+        )}
+
+        {/* ── DOCTORS TAB ───────────────────────────────────────── */}
+        {tab === "doctors" && doctorData && (
+          <div className="space-y-6">
+            <SectionHeader
+              icon="👨‍⚕️"
+              title="Doctor Performance Dashboard"
+              subtitle="Performance metrics, occupancy & revenue per doctor"
+            />
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <ChartCard title="🏥 Doctors by Specialization">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart
+                    data={doctorData.specialization_stats}
+                    layout="vertical"
+                    barSize={14}
                   >
-                    Doctor Status
-                  </div>
-                  {[
-                    ["✅ Approved", stats.approved_doctors, C.mint, C.mintLt],
-                    ["⏳ Pending", stats.pending_doctors, C.amber, C.amberLt],
-                    ["📊 Total", stats.total_doctors, C.teal, C.tealLt],
-                  ].map(([l, v, c, bg]) => (
-                    <div
-                      key={l}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "10px 12px",
-                        background: bg,
-                        borderRadius: 10,
-                        marginBottom: 8,
-                      }}
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="specialization"
+                      width={105}
+                      tick={{ fontSize: 11, fill: "#6b7280" }}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip prefix="" />} />
+                    <Bar
+                      dataKey="doctor_count"
+                      name="Doctors"
+                      radius={[0, 4, 4, 0]}
                     >
-                      <span
-                        style={{ fontSize: 13, fontWeight: 600, color: C.navy }}
-                      >
-                        {l}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 900,
-                          color: c,
-                          fontFamily: F,
-                        }}
-                      >
-                        {v}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div
-                  style={{
-                    background: C.bg,
-                    borderRadius: 16,
-                    padding: "20px",
-                  }}
+                      {doctorData.specialization_stats.map((s, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            SPEC_COLORS[s.specialization] ||
+                            COLORS[i % COLORS.length]
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="📅 Appointments by Specialization">
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={doctorData.specialization_stats.filter(
+                        (s) => s.appointments > 0,
+                      )}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      innerRadius={50}
+                      dataKey="appointments"
+                      nameKey="specialization"
+                    >
+                      {doctorData.specialization_stats.map((s, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            SPEC_COLORS[s.specialization] ||
+                            COLORS[i % COLORS.length]
+                          }
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [v, n]} />
+                    <Legend
+                      formatter={(v) => (
+                        <span
+                          style={{ fontSize: 11, textTransform: "capitalize" }}
+                        >
+                          {v}
+                        </span>
+                      )}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            {/* Doctor Table */}
+            <ChartCard
+              title="📋 All Doctors — Detailed Performance"
+              action={
+                <button
+                  onClick={() => setShowNotifModal(true)}
+                  className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100"
                 >
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: C.navy,
-                      marginBottom: 14,
-                      fontFamily: F,
-                    }}
-                  >
-                    Appointment Status
-                  </div>
-                  {[
-                    [
-                      "📋 Total",
-                      stats.total_appointments,
-                      C.indigo,
-                      C.indigoLt,
-                    ],
-                    [
-                      "✅ Confirmed",
-                      stats.confirmed_appointments,
-                      C.mint,
-                      C.mintLt,
-                    ],
-                  ].map(([l, v, c, bg]) => (
-                    <div
-                      key={l}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "10px 12px",
-                        background: bg,
-                        borderRadius: 10,
-                        marginBottom: 8,
-                      }}
+                  📤 Send Message
+                </button>
+              }
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {[
+                        "Doctor",
+                        "Spec.",
+                        "Fee",
+                        "Experience",
+                        "Appointments",
+                        "Revenue",
+                        "Occupancy",
+                        "Status",
+                        "Action",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="text-left py-3 px-3 text-xs font-black text-gray-400 uppercase tracking-wider"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doctorData.doctors.map((d) => (
+                      <tr
+                        key={d.id}
+                        className="border-b border-gray-50 hover:bg-indigo-50/30 transition"
+                      >
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-gray-800 text-xs">
+                            {d.name}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {d.work_hours}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className="px-2 py-0.5 rounded-lg text-xs font-bold capitalize"
+                            style={{
+                              background:
+                                (SPEC_COLORS[d.specialization] || "#6366f1") +
+                                "20",
+                              color: SPEC_COLORS[d.specialization] || "#6366f1",
+                            }}
+                          >
+                            {d.specialization}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-gray-800">
+                          ₹{d.fee}
+                        </td>
+                        <td className="py-3 px-3 text-gray-600">
+                          {d.experience} yrs
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex gap-1">
+                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">
+                              {d.total_appointments} total
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-black text-indigo-600">
+                          ₹{d.revenue_generated.toLocaleString("en-IN")}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-indigo-500 rounded-full"
+                                style={{ width: `${d.occupancy_rate}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {d.occupancy_rate}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold ${d.is_approved ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}
+                          >
+                            {d.is_approved ? "✅ Active" : "⏳ Pending"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <button
+                            onClick={() => approveDoctor(d.id, !d.is_approved)}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${d.is_approved ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}
+                          >
+                            {d.is_approved ? "Revoke" : "Approve"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          </div>
+        )}
+
+        {/* ── MEDICINES TAB ─────────────────────────────────────── */}
+        {tab === "medicines" && medicineData && (
+          <div className="space-y-6">
+            <SectionHeader
+              icon="💊"
+              title="Medicine Store Analytics"
+              subtitle="Inventory health, sales trends & revenue"
+            />
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <KpiCard
+                icon="💊"
+                label="Total Medicines"
+                value={medicineData.summary.total_medicines}
+                color="bg-gradient-to-br from-indigo-500 to-indigo-700"
+              />
+              <KpiCard
+                icon="✅"
+                label="Available"
+                value={medicineData.summary.available}
+                color="bg-gradient-to-br from-emerald-500 to-emerald-700"
+              />
+              <KpiCard
+                icon="⚠️"
+                label="Low Stock"
+                value={medicineData.summary.low_stock}
+                color="bg-gradient-to-br from-amber-500 to-amber-700"
+              />
+              <KpiCard
+                icon="❌"
+                label="Out of Stock"
+                value={medicineData.summary.out_of_stock}
+                color="bg-gradient-to-br from-red-500 to-red-700"
+              />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <ChartCard title="📦 Order Trend (Last 14 Days)">
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart data={medicineData.order_trend}>
+                    <defs>
+                      <linearGradient
+                        id="gradOrder"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#06b6d4"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#06b6d4"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip prefix="" />} />
+                    <Area
+                      type="monotone"
+                      dataKey="orders"
+                      name="Orders"
+                      stroke="#06b6d4"
+                      strokeWidth={2.5}
+                      fill="url(#gradOrder)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard title="📊 Order Status Distribution">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={Object.entries(medicineData.order_status)
+                        .filter(([, v]) => v > 0)
+                        .map(([k, v]) => ({ name: k, value: v }))}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      innerRadius={45}
+                      dataKey="value"
+                      nameKey="name"
+                      label={({ name, value }) => `${name}: ${value}`}
                     >
-                      <span
-                        style={{ fontSize: 13, fontWeight: 600, color: C.navy }}
-                      >
-                        {l}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 900,
-                          color: c,
-                          fontFamily: F,
-                        }}
-                      >
-                        {v}
-                      </span>
-                    </div>
-                  ))}
+                      {Object.keys(medicineData.order_status).map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            {/* Critical Stock Alert */}
+            {medicineData.medicines.filter((m) => m.status !== "good").length >
+              0 && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">🚨</span>
+                  <h3 className="font-black text-red-800">
+                    Stock Alerts — Action Required
+                  </h3>
                 </div>
+                <div className="grid md:grid-cols-2 gap-2">
+                  {medicineData.medicines
+                    .filter((m) => m.status !== "good")
+                    .map((m) => (
+                      <div
+                        key={m.id}
+                        className={`flex justify-between items-center p-3 rounded-xl ${m.status === "critical" ? "bg-red-100" : "bg-yellow-50"}`}
+                      >
+                        <div>
+                          <div className="font-bold text-sm text-gray-800">
+                            {m.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {m.manufacturer}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div
+                            className={`font-black text-lg ${m.status === "critical" ? "text-red-600" : "text-yellow-600"}`}
+                          >
+                            {m.stock}
+                          </div>
+                          <div
+                            className={`text-xs font-bold ${m.status === "critical" ? "text-red-500" : "text-yellow-500"}`}
+                          >
+                            {m.status === "critical" ? "❌ OUT" : "⚠️ LOW"}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top Selling Medicines */}
+            <ChartCard title="🏆 Top Selling Medicines">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {[
+                        "Rank",
+                        "Medicine",
+                        "Price",
+                        "Stock",
+                        "Units Sold",
+                        "Revenue",
+                        "Status",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="text-left py-3 px-3 text-xs font-black text-gray-400 uppercase"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {medicineData.medicines.slice(0, 15).map((m, i) => (
+                      <tr
+                        key={m.id}
+                        className="border-b border-gray-50 hover:bg-gray-50 transition"
+                      >
+                        <td className="py-3 px-3">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white"
+                            style={{ background: COLORS[i % COLORS.length] }}
+                          >
+                            {i + 1}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-gray-800">
+                            {m.name}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {m.manufacturer}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-bold">₹{m.price}</td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${m.stock === 0 ? "bg-red-500" : m.stock < 50 ? "bg-yellow-500" : "bg-green-500"}`}
+                                style={{
+                                  width: `${Math.min((m.stock / 600) * 100, 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {m.stock}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-gray-800">
+                          {m.total_sold}
+                        </td>
+                        <td className="py-3 px-3 font-black text-emerald-600">
+                          ₹
+                          {m.revenue.toLocaleString("en-IN", {
+                            maximumFractionDigits: 0,
+                          })}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
+                              m.status === "good"
+                                ? "bg-green-50 text-green-700"
+                                : m.status === "low"
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {m.status === "good"
+                              ? "✅ Good"
+                              : m.status === "low"
+                                ? "⚠️ Low"
+                                : "❌ Out"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          </div>
+        )}
+
+        {/* ── USERS TAB ─────────────────────────────────────────── */}
+        {tab === "users" && (
+          <div className="space-y-6">
+            <SectionHeader
+              icon="👥"
+              title="User Management"
+              subtitle={`${users.length} registered users`}
+            />
+
+            {/* Role breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {["patient", "doctor", "pharmacy", "admin"].map((role) => {
+                const count = users.filter((u) => u.role === role).length;
+                const colors = {
+                  patient: "from-blue-500 to-blue-700",
+                  doctor: "from-emerald-500 to-emerald-700",
+                  pharmacy: "from-orange-500 to-orange-700",
+                  admin: "from-violet-500 to-violet-700",
+                };
+                const icons = {
+                  patient: "🧑‍🤒",
+                  doctor: "👨‍⚕️",
+                  pharmacy: "🏪",
+                  admin: "🛡️",
+                };
+                return (
+                  <KpiCard
+                    key={role}
+                    icon={icons[role]}
+                    label={`${role}s`}
+                    value={count}
+                    color={`bg-gradient-to-br ${colors[role]}`}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-black text-gray-800">All Users</h3>
+                <div className="text-sm text-gray-400">
+                  {users.filter((u) => u.is_active).length} active
+                </div>
+              </div>
+              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50">
+                    <tr>
+                      {[
+                        "User",
+                        "Email",
+                        "Role",
+                        "Joined",
+                        "Status",
+                        "Action",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="text-left py-3 px-4 text-xs font-black text-gray-400 uppercase"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr
+                        key={u.id}
+                        className="border-b border-gray-50 hover:bg-indigo-50/20 transition"
+                      >
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-sm font-black text-indigo-600">
+                              {u.username[0].toUpperCase()}
+                            </div>
+                            <span className="font-bold text-gray-800">
+                              {u.username}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-500 text-xs">
+                          {u.email || "—"}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold capitalize ${
+                              u.role === "admin"
+                                ? "bg-violet-100 text-violet-700"
+                                : u.role === "doctor"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : u.role === "pharmacy"
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-400 text-xs">
+                          {new Date(u.date_joined).toLocaleDateString("en-IN")}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold ${u.is_active ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                          >
+                            {u.is_active ? "● Active" : "○ Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {u.role !== "admin" && (
+                            <button
+                              onClick={() => toggleUser(u.id, u.is_active)}
+                              className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${u.is_active ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}
+                            >
+                              {u.is_active ? "Disable" : "Enable"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
-          {tab === "doctors" && (
-            <>
-              <div
-                style={{
-                  padding: "14px 22px",
-                  borderBottom: `1px solid ${C.border}`,
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                }}
+          </div>
+        )}
+
+        {/* ── NOTIFICATIONS TAB ─────────────────────────────────── */}
+        {tab === "notifications" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <SectionHeader
+                icon="🔔"
+                title="Notifications & Suggestions"
+                subtitle="Messages sent to doctors from admin"
+              />
+              <button
+                onClick={() => setShowNotifModal(true)}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-indigo-700 transition"
               >
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="🔍 Search doctors…"
-                  style={{
-                    flex: 1,
-                    padding: "9px 14px",
-                    borderRadius: 10,
-                    border: `1.5px solid ${C.border}`,
-                    fontSize: 13,
-                    outline: "none",
-                    fontFamily: F,
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = C.teal)}
-                  onBlur={(e) => (e.target.style.borderColor = C.border)}
-                />
-                <span style={{ fontSize: 12, color: C.slate, fontWeight: 600 }}>
-                  {filteredDocs.length} doctors
-                </span>
-              </div>
-              {filteredDocs.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "48px 0",
-                    color: C.slate,
-                  }}
-                >
-                  No doctors found
+                <span>📤</span> New Message
+              </button>
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
+                <div className="text-5xl mb-4">📭</div>
+                <div className="text-gray-400 font-medium">
+                  Koi notification nahi bheji gayi abhi tak.
                 </div>
-              ) : (
-                filteredDocs.map((d) => (
-                  <DoctorRow key={d.id} doc={d} onToggle={approveDoctor} />
-                ))
-              )}
-            </>
-          )}
-          {tab === "users" && (
-            <>
-              <div
-                style={{
-                  padding: "14px 22px",
-                  borderBottom: `1px solid ${C.border}`,
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="🔍 Search users…"
-                  style={{
-                    flex: 1,
-                    minWidth: 180,
-                    padding: "9px 14px",
-                    borderRadius: 10,
-                    border: `1.5px solid ${C.border}`,
-                    fontSize: 13,
-                    outline: "none",
-                    fontFamily: F,
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = C.teal)}
-                  onBlur={(e) => (e.target.style.borderColor = C.border)}
-                />
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["all", "patient", "doctor", "admin"].map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => setSearch(r === "all" ? "" : r)}
-                      style={{
-                        padding: "5px 12px",
-                        borderRadius: 8,
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        background: search === r ? C.teal : C.bg,
-                        color: search === r ? "#fff" : C.slate,
-                        textTransform: "capitalize",
-                      }}
+                <button
+                  onClick={() => setShowNotifModal(true)}
+                  className="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700"
+                >
+                  Pehli notification bhejein
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    className={`bg-white rounded-2xl border shadow-sm p-5 flex items-start gap-4 ${
+                      n.type === "warning"
+                        ? "border-red-200"
+                        : n.type === "achievement"
+                          ? "border-yellow-200"
+                          : n.type === "suggestion"
+                            ? "border-indigo-200"
+                            : "border-gray-100"
+                    }`}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
+                        n.type === "warning"
+                          ? "bg-red-50"
+                          : n.type === "achievement"
+                            ? "bg-yellow-50"
+                            : n.type === "suggestion"
+                              ? "bg-indigo-50"
+                              : "bg-gray-50"
+                      }`}
                     >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-                <span style={{ fontSize: 12, color: C.slate, fontWeight: 600 }}>
-                  {filteredUsers.length} users
-                </span>
+                      {n.type === "warning"
+                        ? "⚠️"
+                        : n.type === "achievement"
+                          ? "🏆"
+                          : n.type === "suggestion"
+                            ? "💡"
+                            : "ℹ️"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-lg font-bold capitalize ${
+                              n.type === "warning"
+                                ? "bg-red-50 text-red-700"
+                                : n.type === "achievement"
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : n.type === "suggestion"
+                                    ? "bg-indigo-50 text-indigo-700"
+                                    : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {n.type}
+                          </span>
+                          <span
+                            className={`text-xs font-bold ${n.is_broadcast ? "text-purple-600" : "text-gray-600"}`}
+                          >
+                            → {n.recipient}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {new Date(n.created_at).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-2 leading-relaxed">
+                        {n.message}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              {filteredUsers.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "48px 0",
-                    color: C.slate,
-                  }}
-                >
-                  No users found
-                </div>
-              ) : (
-                filteredUsers.map((u) => (
-                  <UserRow key={u.id} u={u} onToggle={toggleUser} />
-                ))
-              )}
-            </>
-          )}
-          {tab === "medicines" && <MedicineTab />}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
