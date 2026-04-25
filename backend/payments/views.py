@@ -1,173 +1,215 @@
-"""
-DocNDoSe — Payments Views (Fake Gateway Compatible)
-Replace backend/payments/views.py with this file.
-
-Works with BOTH:
-- Real Razorpay (if keys are set)
-- Fake payment gateway (if keys are missing/fake)
-"""
-
-import hmac, hashlib, razorpay
+import razorpay
+import hmac
+import hashlib
+import uuid
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-
-from appointments.models import Appointment
 from .models import Payment
+from appointments.models import Appointment
 
-
-def get_razorpay_client():
-    key_id     = getattr(settings, 'RAZORPAY_KEY_ID',     '')
-    key_secret = getattr(settings, 'RAZORPAY_KEY_SECRET', '')
-    if key_id and key_secret and key_id.startswith('rzp_'):
-        return razorpay.Client(auth=(key_id, key_secret)), True
-    return None, False
+# Initialize Razorpay client using keys from settings
+client = razorpay.Client(
+    auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+)
 
 
 class CreateOrderView(APIView):
+    """
+    Step 1 of payment flow.
+    Patient requests an order — Razorpay gives back an order_id.
+    Frontend uses this order_id to open the Razorpay checkout popup.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        appointment_id = request.data.get('appointment_id')
-        try:
-            apt = Appointment.objects.get(id=appointment_id, patient=request.user)
-        except Appointment.DoesNotExist:
-            return Response({'error': 'Appointment not found'}, status=404)
+        appointment_id = request.data.get("appointment_id")
 
-        amount_paise = int(float(apt.doctor.consultation_fee) * 100)
-        client, real_razorpay = get_razorpay_client()
-
-        if real_razorpay:
-            # Real Razorpay
-            try:
-                order = client.order.create({
-                    'amount':   amount_paise,
-                    'currency': 'INR',
-                    'receipt':  f'apt_{appointment_id}',
-                })
-                Payment.objects.create(
-                    patient=request.user, appointment=apt,
-                    amount=apt.doctor.consultation_fee,
-                    razorpay_order_id=order['id'], status='pending',
-                )
-                return Response({
-                    'order_id': order['id'], 'amount': amount_paise,
-                    'currency': 'INR', 'key_id': settings.RAZORPAY_KEY_ID,
-                })
-            except Exception as e:
-                return Response({'error': str(e)}, status=500)
-        else:
-            # Fake gateway — generate fake order ID
-            import uuid
-            fake_order_id = f"order_fake_{uuid.uuid4().hex[:16].upper()}"
-            Payment.objects.create(
-                patient=request.user, appointment=apt,
-                amount=apt.doctor.consultation_fee,
-                razorpay_order_id=fake_order_id, status='pending',
+        if not appointment_id:
+            return Response(
+                {"error": "appointment_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            return Response({
-                'order_id': fake_order_id,
-                'amount':   amount_paise,
-                'currency': 'INR',
-                'key_id':   'rzp_test_fake',
-                'fake':     True,
-            })
+
+        # Fetch appointment and validate ownership
+        try:
+            appointment = Appointment.objects.get(
+                pk=appointment_id, patient=request.user
+            )
+        except Appointment.DoesNotExist:
+            return Response(
+                {"error": "Appointment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if appointment.status != "pending_payment":
+            return Response(
+                {"error": "This appointment has already been processed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if a payment record already exists for this appointment
+        if Payment.objects.filter(
+            appointment=appointment, status="success"
+        ).exists():
+            return Response(
+                {"error": "Payment already completed for this appointment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Amount in paise (Razorpay always works in smallest currency unit)
+        # ₹500 = 50000 paise
+        amount_inr = float(appointment.doctor.consultation_fee)
+        amount_paise = int(amount_inr * 100)
+
+        # Create Razorpay order
+        razorpay_order = client.order.create({
+            "amount":   amount_paise,
+            "currency": "INR",
+            "receipt":  f"apt_{appointment_id}_{uuid.uuid4().hex[:8]}",
+            "notes": {
+                "appointment_id": str(appointment_id),
+                "patient":        request.user.username,
+                "doctor":         appointment.doctor.user.username,
+            },
+        })
+
+        # Save a pending payment record in our database
+        Payment.objects.update_or_create(
+            appointment=appointment,
+            defaults={
+                "patient":        request.user,
+                "amount":         amount_inr,
+                "status":         "pending",
+                "transaction_id": razorpay_order["id"],
+            },
+        )
+
+        return Response({
+            "order_id":    razorpay_order["id"],
+            "amount":      amount_paise,
+            "currency":    "INR",
+            "key_id":      settings.RAZORPAY_KEY_ID,
+            "appointment_id": appointment_id,
+            "doctor_name": appointment.doctor.user.get_full_name(),
+            "patient_name": request.user.get_full_name() or request.user.username,
+            "description": f"Consultation with Dr. {appointment.doctor.user.get_full_name()}",
+        })
 
 
 class VerifyPaymentView(APIView):
+    """
+    Step 2 of payment flow.
+    After Razorpay popup closes successfully, frontend sends the payment
+    details here.  We verify the signature — if valid, appointment confirmed.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        payment_id = request.data.get('razorpay_payment_id', '')
-        order_id   = request.data.get('razorpay_order_id',   '')
-        signature  = request.data.get('razorpay_signature',  '')
-        apt_id     = request.data.get('appointment_id')
+        razorpay_order_id   = request.data.get("razorpay_order_id")
+        razorpay_payment_id = request.data.get("razorpay_payment_id")
+        razorpay_signature  = request.data.get("razorpay_signature")
 
-        # ── Fake payment detection ────────────────────────────────────────────
-        is_fake = (
-            'fake' in payment_id.lower() or
-            'fake' in order_id.lower() or
-            'fake' in signature.lower() or
-            not getattr(settings, 'RAZORPAY_KEY_SECRET', '')
-        )
+        if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature]):
+            return Response(
+                {"error": "razorpay_order_id, razorpay_payment_id and razorpay_signature are all required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        try:
-            payment = Payment.objects.get(razorpay_order_id=order_id)
-        except Payment.DoesNotExist:
-            # Create payment record if missing (edge case)
+        # ── Signature verification ────────────────────────────────────────────
+        # Razorpay creates a signature = HMAC-SHA256(order_id + "|" + payment_id, secret)
+        # We recreate it and compare — if they match, payment is genuine.
+        message = f"{razorpay_order_id}|{razorpay_payment_id}"
+        expected_signature = hmac.new(
+            settings.RAZORPAY_KEY_SECRET.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if expected_signature != razorpay_signature:
+            # Signature mismatch — someone tampered with the data
             try:
-                apt = Appointment.objects.get(id=apt_id, patient=request.user)
-                payment = Payment.objects.create(
-                    patient=request.user, appointment=apt,
-                    amount=apt.doctor.consultation_fee,
-                    razorpay_order_id=order_id, status='pending',
-                )
-            except Exception:
-                return Response({'error': 'Payment record not found'}, status=404)
-
-        if is_fake:
-            # Accept fake payment directly
-            payment.razorpay_payment_id = payment_id
-            payment.razorpay_signature  = signature
-            payment.status = 'success'
-            payment.save()
-            payment.appointment.status = 'confirmed'
-            payment.appointment.save()
-            return Response({'status': 'success', 'message': 'Payment verified (test mode)'})
-
-        # ── Real Razorpay verification ────────────────────────────────────────
-        try:
-            key_secret = settings.RAZORPAY_KEY_SECRET.encode()
-            msg = f"{order_id}|{payment_id}".encode()
-            expected = hmac.new(key_secret, msg, hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(expected, signature):
-                payment.status = 'failed'
+                payment = Payment.objects.get(transaction_id=razorpay_order_id)
+                payment.status = "failed"
                 payment.save()
-                return Response({'error': 'Invalid signature'}, status=400)
+            except Payment.DoesNotExist:
+                pass
+            return Response(
+                {"error": "Payment verification failed. Invalid signature."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            payment.razorpay_payment_id = payment_id
-            payment.razorpay_signature  = signature
-            payment.status = 'success'
-            payment.save()
-            payment.appointment.status = 'confirmed'
-            payment.appointment.save()
-            return Response({'status': 'success'})
+        # ── Signature valid — confirm payment and appointment ─────────────────
+        try:
+            payment = Payment.objects.get(transaction_id=razorpay_order_id)
+        except Payment.DoesNotExist:
+            return Response(
+                {"error": "Payment record not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        payment.status         = "success"
+        payment.transaction_id = razorpay_payment_id   # store actual payment id
+        payment.save()
 
+        appointment         = payment.appointment
+        appointment.status  = "confirmed"
+        appointment.save()
 
-class PaymentHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        payments = Payment.objects.filter(patient=request.user).select_related('appointment__doctor__user').order_by('-created_at')
-        data = []
-        for p in payments:
-            data.append({
-                'id':           p.id,
-                'amount':       float(p.amount),
-                'status':       p.status,
-                'payment_id':   p.razorpay_payment_id,
-                'order_id':     p.razorpay_order_id,
-                'created_at':   p.created_at.strftime('%Y-%m-%d %H:%M'),
-                'paid_at':      p.paid_at.strftime('%Y-%m-%d %H:%M') if p.paid_at else None,
-                'doctor':       p.appointment.doctor.user.get_full_name() if p.appointment else None,
-                'specialization': p.appointment.doctor.specialization if p.appointment else None,
-            })
-        return Response(data)
+        return Response({
+            "message":        "Payment successful! Appointment confirmed.",
+            "payment_id":     razorpay_payment_id,
+            "appointment_id": appointment.id,
+            "status":         "confirmed",
+        })
 
 
 class PaymentFailedView(APIView):
+    """
+    Called when user closes Razorpay popup without paying,
+    or payment fails.  We mark the payment as failed.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        order_id = request.data.get('razorpay_order_id')
+        order_id = request.data.get("order_id")
+
+        if not order_id:
+            return Response({"error": "order_id required."}, status=400)
+
         try:
-            payment = Payment.objects.get(razorpay_order_id=order_id)
-            payment.status = 'failed'
+            payment = Payment.objects.get(
+                transaction_id=order_id, patient=request.user
+            )
+            payment.status = "failed"
             payment.save()
+            return Response({"message": "Payment marked as failed."})
         except Payment.DoesNotExist:
-            pass
-        return Response({'status': 'noted'})
+            return Response({"error": "Payment not found."}, status=404)
+
+
+class PaymentHistoryView(APIView):
+    """Returns all past payments for the logged-in patient."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        payments = Payment.objects.filter(
+            patient=request.user
+        ).order_by("-created_at")
+
+        data = [
+            {
+                "id":             p.id,
+                "transaction_id": p.transaction_id,
+                "amount":         str(p.amount),
+                "status":         p.status,
+                "appointment_id": p.appointment.id,
+                "doctor":         p.appointment.doctor.user.get_full_name(),
+                "date":           p.appointment.appointment_date,
+                "paid_at":        p.paid_at,
+            }
+            for p in payments
+        ]
+        return Response(data)
