@@ -63,7 +63,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'docndose.wsgi.application'
 ASGI_APPLICATION  = 'docndose.asgi.application'
 
-# ── Database ──────────────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
